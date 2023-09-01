@@ -42,14 +42,17 @@ let
 
   stateDir = "/var/lib/dovecot";
 
-  mkPipeScript = n: v: pkgs.writeTextFile {
+  mkPipeScript = n: v: t: pkgs.writeTextFile {
     name = "sieve-${n}";
     text = v;
     executable = true;
-    destination = "/pipe/bin/${n}";
+    destination = "/${t}/bin/${n}";
   };
-  genPipeScript = lib.mapAttrsToList (n: v: mkPipeScript n v);
-  pipeScriptsDrvs = genPipeScript cfg.dovecotPipeScripts;
+  genShellScript = f: t: lib.mapAttrsToList (n: v: mkPipeScript n v t) f;
+
+  pipeScriptsDrvs = genShellScript cfg.dovecot.pipeScripts "pipe";
+  executeScriptsDrvs = genShellScript cfg.dovecot.executeScripts "execute";
+  filterScriptsDrvs = genShellScript cfg.dovecot.filterScripts "filter";
 
   pipeBin = pkgs.stdenv.mkDerivation {
     name = "pipe_bin";
@@ -69,6 +72,8 @@ let
   };
 
   pipeScripts = pkgs.symlinkJoin { name = "pipe-scripts"; paths = pipeScriptsDrvs ++ [ pipeBin ]; };
+  executeScripts = pkgs.symlinkJoin { name = "execute-scripts"; paths = executeScriptsDrvs; };
+  filterScripts = pkgs.symlinkJoin { name = "filter-scripts"; paths = filterScriptsDrvs; };
 
   ldapConfig = pkgs.writeTextFile {
     name = "dovecot-ldap.conf.ext.template";
@@ -334,8 +339,12 @@ in
           imapsieve_mailbox2_before = file:${stateDir}/imap_sieve/report-ham.sieve
 
           sieve_pipe_bin_dir = ${pipeScripts}/pipe/bin
+          sieve_execute_bin_dir = ${executeScripts}/execute/bin
+          sieve_filter_bin_dir = ${filterScripts}/filter/bin
 
           sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
+          sieve_global_extensions = ${lib.concatMapStringsSep " " (x: "+${x}") cfg.dovecot.sieveGlobalExtensions}
+          sieve_extensions = ${lib.concatMapStringsSep " " (x: "+${x}") cfg.dovecot.sieveExtensions}
         }
 
         ${lib.optionalString cfg.fullTextSearch.enable ''
