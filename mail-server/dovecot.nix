@@ -34,13 +34,22 @@ let
   dovecotMaildir =
     "maildir:${cfg.mailDirectory}/%d/%n${maildirLayoutAppendix}"
     + (lib.optionalString (cfg.indexDir != null)
-       ":INDEX=${cfg.indexDir}/%d/%n"
-      );
+      ":INDEX=${cfg.indexDir}/%d/%n"
+    );
 
   postfixCfg = config.services.postfix;
   dovecot2Cfg = config.services.dovecot2;
 
   stateDir = "/var/lib/dovecot";
+
+  mkPipeScript = n: v: pkgs.writeTextFile {
+    name = "sieve-${n}";
+    text = v;
+    executable = true;
+    destination = "/pipe/bin/${n}";
+  };
+  genPipeScript = lib.mapAttrsToList (n: v: mkPipeScript n v);
+  pipeScriptsDrvs = genPipeScript cfg.dovecotPipeScripts;
 
   pipeBin = pkgs.stdenv.mkDerivation {
     name = "pipe_bin";
@@ -59,6 +68,7 @@ let
     '';
   };
 
+  pipeScripts = pkgs.symlinkJoin { name = "pipe-scripts"; paths = pipeScriptsDrvs ++ [ pipeBin ]; };
 
   ldapConfig = pkgs.writeTextFile {
     name = "dovecot-ldap.conf.ext.template";
@@ -170,7 +180,7 @@ in
       sslServerCert = certificatePath;
       sslServerKey = keyPath;
       enableLmtp = true;
-      modules = [ pkgs.dovecot_pigeonhole ] ++ (lib.optional cfg.fullTextSearch.enable pkgs.dovecot_fts_xapian );
+      modules = [ pkgs.dovecot_pigeonhole ] ++ (lib.optional cfg.fullTextSearch.enable pkgs.dovecot_fts_xapian);
       mailPlugins.globally.enable = lib.optionals cfg.fullTextSearch.enable [ "fts" "fts_xapian" ];
       protocols = lib.optional cfg.enableManageSieve "sieve";
 
@@ -323,7 +333,7 @@ in
           imapsieve_mailbox2_causes = COPY
           imapsieve_mailbox2_before = file:${stateDir}/imap_sieve/report-ham.sieve
 
-          sieve_pipe_bin_dir = ${pipeBin}/pipe/bin
+          sieve_pipe_bin_dir = ${pipeScripts}/pipe/bin
 
           sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
         }
@@ -366,7 +376,7 @@ in
       '' + (lib.optionalString cfg.ldap.enable setPwdInLdapConfFile);
     };
 
-    systemd.services.postfix.restartTriggers = [ genPasswdScript ] ++ (lib.optional cfg.ldap.enable [setPwdInLdapConfFile]);
+    systemd.services.postfix.restartTriggers = [ genPasswdScript ] ++ (lib.optional cfg.ldap.enable [ setPwdInLdapConfFile ]);
 
     systemd.services.dovecot-fts-xapian-optimize = lib.mkIf (cfg.fullTextSearch.enable && cfg.fullTextSearch.maintenance.enable) {
       description = "Optimize dovecot indices for fts_xapian";

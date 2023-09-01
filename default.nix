@@ -40,14 +40,14 @@ in
     domains = mkOption {
       type = types.listOf types.str;
       example = [ "example.com" ];
-      default = [];
+      default = [ ];
       description = "The domains that this mail server serves.";
     };
 
     certificateDomains = mkOption {
       type = types.listOf types.str;
       example = [ "imap.example.com" "pop3.example.com" ];
-      default = [];
+      default = [ ];
       description = ''
         ({option}`mailserver.certificateScheme` == `acme-nginx`)
 
@@ -60,6 +60,17 @@ in
       example = 52428800;
       default = 20971520;
       description = "Message size limit enforced by Postfix.";
+    };
+
+    dovecotPipeScripts = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      example = {
+        "hello.sh" = "echo world";
+      };
+      description = ''
+        A map of scripts available to pipe
+      '';
     };
 
     loginAccounts = mkOption {
@@ -102,8 +113,8 @@ in
 
           aliases = mkOption {
             type = with types; listOf types.str;
-            example = ["abuse@example.com" "postmaster@example.com"];
-            default = [];
+            example = [ "abuse@example.com" "postmaster@example.com" ];
+            default = [ ];
             description = ''
               A list of aliases of this login account.
               Note: Use list entries like "@example.com" to create a catchAll
@@ -113,8 +124,8 @@ in
 
           catchAll = mkOption {
             type = with types; listOf (enum cfg.domains);
-            example = ["example.com" "example2.com"];
-            default = [];
+            example = [ "example.com" "example2.com" ];
+            default = [ ];
             description = ''
               For which domains should this account act as a catch all?
               Note: Does not allow sending from all addresses of these domains.
@@ -195,13 +206,13 @@ in
         nix-shell -p mkpasswd --run 'mkpasswd -sm bcrypt'
         ```
       '';
-      default = {};
+      default = { };
     };
 
     ldap = {
       enable = mkEnableOption "LDAP support";
 
-      uris  = mkOption {
+      uris = mkOption {
         type = types.listOf types.str;
         example = literalExpression ''
           [
@@ -442,7 +453,7 @@ in
     };
 
     lmtpSaveToDetailMailbox = mkOption {
-      type = types.enum ["yes" "no"];
+      type = types.enum [ "yes" "no" ];
       default = "yes";
       description = ''
         If an email address is delimited by a "+", should it be filed into a
@@ -452,12 +463,14 @@ in
     };
 
     extraVirtualAliases = mkOption {
-      type = let
-        loginAccount = mkOptionType {
-          name = "Login Account";
-          check = (account: builtins.elem account (builtins.attrNames cfg.loginAccounts));
-        };
-      in with types; attrsOf (either loginAccount (nonEmptyListOf loginAccount));
+      type =
+        let
+          loginAccount = mkOptionType {
+            name = "Login Account";
+            check = (account: builtins.elem account (builtins.attrNames cfg.loginAccounts));
+          };
+        in
+        with types; attrsOf (either loginAccount (nonEmptyListOf loginAccount));
       example = {
         "info@example.com" = "user1@example.com";
         "postmaster@example.com" = "user1@example.com";
@@ -475,7 +488,7 @@ in
         example all mails for `multi@example.com` will be forwarded to both
         `user1@example.com` and `user2@example.com`.
       '';
-      default = {};
+      default = { };
     };
 
     forwards = mkOption {
@@ -492,7 +505,7 @@ in
         can't send mail as `user@example.com`. Also, this option
         allows to forward mails to external addresses.
       '';
-      default = {};
+      default = { };
     };
 
     rejectSender = mkOption {
@@ -502,7 +515,7 @@ in
         Reject emails from these addresses from unauthorized senders.
         Use if a spammer is using the same domain or the same sender over and over.
       '';
-      default = [];
+      default = [ ];
     };
 
     rejectRecipients = mkOption {
@@ -513,7 +526,7 @@ in
         Use if a spammer has found email addresses in a catchall domain but you do
         not want to disable the catchall.
       '';
-      default = [];
+      default = [ ];
     };
 
     vmailUID = mkOption {
@@ -603,28 +616,30 @@ in
       };
     };
 
-    certificateScheme = let
-      schemes = [ "manual" "selfsigned" "acme-nginx" "acme" ];
-      translate = i: warn "Setting mailserver.certificateScheme by number is deprecated, please use names instead: 'mailserver.certificateScheme = ${builtins.toString i}' can be replaced by 'mailserver.certificateScheme = \"${(builtins.elemAt schemes (i - 1))}\"'."
-        (builtins.elemAt schemes (i - 1));
-    in mkOption {
-      type = with types; coercedTo (enum [ 1 2 3 ]) translate (enum schemes);
-      default = "selfsigned";
-      description = ''
-        The scheme to use for managing TLS certificates:
+    certificateScheme =
+      let
+        schemes = [ "manual" "selfsigned" "acme-nginx" "acme" ];
+        translate = i: warn "Setting mailserver.certificateScheme by number is deprecated, please use names instead: 'mailserver.certificateScheme = ${builtins.toString i}' can be replaced by 'mailserver.certificateScheme = \"${(builtins.elemAt schemes (i - 1))}\"'."
+          (builtins.elemAt schemes (i - 1));
+      in
+      mkOption {
+        type = with types; coercedTo (enum [ 1 2 3 ]) translate (enum schemes);
+        default = "selfsigned";
+        description = ''
+          The scheme to use for managing TLS certificates:
 
-        1. `manual`: you specify locations via {option}`mailserver.certificateFile` and
-           {option}`mailserver.keyFile` and manually copy certificates there.
-        2. `selfsigned`: you let the server create new (self-signed) certificates on the fly.
-        3. `acme-nginx`: you let the server request certificates from [Let's Encrypt](https://letsencrypt.org)
-           via NixOS' ACME module. By default, this will set up a stripped-down Nginx server for
-           {option}`mailserver.fqdn` and open port 80. For this to work, the FQDN must be properly
-           configured to point to your server (see the [setup guide](setup-guide.rst) for more information).
-        4. `acme`: you already have an ACME certificate set up (for example, you're already running a TLS-enabled
-           Nginx server on the FQDN). This is better than `manual` because the appropriate services will be reloaded
-           when the certificate is renewed.
-      '';
-    };
+          1. `manual`: you specify locations via {option}`mailserver.certificateFile` and
+             {option}`mailserver.keyFile` and manually copy certificates there.
+          2. `selfsigned`: you let the server create new (self-signed) certificates on the fly.
+          3. `acme-nginx`: you let the server request certificates from [Let's Encrypt](https://letsencrypt.org)
+             via NixOS' ACME module. By default, this will set up a stripped-down Nginx server for
+             {option}`mailserver.fqdn` and open port 80. For this to work, the FQDN must be properly
+             configured to point to your server (see the [setup guide](setup-guide.rst) for more information).
+          4. `acme`: you already have an ACME certificate set up (for example, you're already running a TLS-enabled
+             Nginx server on the FQDN). This is better than `manual` because the appropriate services will be reloaded
+             when the certificate is renewed.
+        '';
+      };
 
     certificateFile = mkOption {
       type = types.path;
@@ -760,36 +775,36 @@ in
     };
 
     dkimKeyBits = mkOption {
-        type = types.int;
-        default = 1024;
-        description = ''
-            How many bits in generated DKIM keys. RFC6376 advises minimum 1024-bit keys.
+      type = types.int;
+      default = 1024;
+      description = ''
+        How many bits in generated DKIM keys. RFC6376 advises minimum 1024-bit keys.
 
-            If you have already deployed a key with a different number of bits than specified
-            here, then you should use a different selector ({option}`mailserver.dkimSelector`). In order to get
-            this package to generate a key with the new number of bits, you will either have to
-            change the selector or delete the old key file.
-        '';
+        If you have already deployed a key with a different number of bits than specified
+        here, then you should use a different selector ({option}`mailserver.dkimSelector`). In order to get
+        this package to generate a key with the new number of bits, you will either have to
+        change the selector or delete the old key file.
+      '';
     };
 
     dkimHeaderCanonicalization = mkOption {
-        type = types.enum ["relaxed" "simple"];
-        default = "relaxed";
-        description = ''
-          DKIM canonicalization algorithm for message headers.
+      type = types.enum [ "relaxed" "simple" ];
+      default = "relaxed";
+      description = ''
+        DKIM canonicalization algorithm for message headers.
 
-          See https://datatracker.ietf.org/doc/html/rfc6376/#section-3.4 for details.
-        '';
+        See https://datatracker.ietf.org/doc/html/rfc6376/#section-3.4 for details.
+      '';
     };
 
     dkimBodyCanonicalization = mkOption {
-        type = types.enum ["relaxed" "simple"];
-        default = "relaxed";
-        description = ''
-          DKIM canonicalization algorithm for message bodies.
+      type = types.enum [ "relaxed" "simple" ];
+      default = "relaxed";
+      description = ''
+        DKIM canonicalization algorithm for message bodies.
 
-          See https://datatracker.ietf.org/doc/html/rfc6376/#section-3.4 for details.
-        '';
+        See https://datatracker.ietf.org/doc/html/rfc6376/#section-3.4 for details.
+      '';
     };
 
     dmarcReporting = {
@@ -893,16 +908,17 @@ in
       address = mkOption {
         type = types.str;
         # read the default from nixos' redis module
-        default = let
-          cf = config.services.redis.servers.rspamd.bind;
-          cfdefault = if cf == null then "127.0.0.1" else cf;
-          ips = lib.strings.splitString " " cfdefault;
-          ip = lib.lists.head (ips ++ [ "127.0.0.1" ]);
-          isIpv6 = ip: lib.lists.elem ":" (lib.stringToCharacters ip);
-        in
-        if (ip == "0.0.0.0" || ip == "::")
-        then "127.0.0.1"
-        else if isIpv6 ip then "[${ip}]" else ip;
+        default =
+          let
+            cf = config.services.redis.servers.rspamd.bind;
+            cfdefault = if cf == null then "127.0.0.1" else cf;
+            ips = lib.strings.splitString " " cfdefault;
+            ip = lib.lists.head (ips ++ [ "127.0.0.1" ]);
+            isIpv6 = ip: lib.lists.elem ":" (lib.stringToCharacters ip);
+          in
+          if (ip == "0.0.0.0" || ip == "::")
+          then "127.0.0.1"
+          else if isIpv6 ip then "[${ip}]" else ip;
         defaultText = lib.literalMD "computed from `config.services.redis.servers.rspamd.bind`";
         description = ''
           Address that rspamd should use to contact redis.
@@ -1071,7 +1087,7 @@ in
 
       compression = {
         method = mkOption {
-          type = types.nullOr (types.enum ["none" "lz4" "zstd" "zlib" "lzma"]);
+          type = types.nullOr (types.enum [ "none" "lz4" "zstd" "zlib" "lzma" ]);
           default = null;
           description = "Leaving this unset allows borg to choose. The default for borg 1.1.4 is lz4.";
         };
@@ -1129,14 +1145,14 @@ in
 
       locations = mkOption {
         type = types.listOf types.path;
-        default = [cfg.mailDirectory];
+        default = [ cfg.mailDirectory ];
         defaultText = lib.literalExpression "[ config.mailserver.mailDirectory ]";
         description = "The locations that are to be backed up by borg.";
       };
 
       extraArgumentsForInit = mkOption {
         type = types.listOf types.str;
-        default = ["--critical"];
+        default = [ "--critical" ];
         description = "Additional arguments to add to the borg init command line.";
       };
 
@@ -1237,9 +1253,9 @@ in
       cronIntervals = mkOption {
         type = types.attrsOf types.str;
         default = {
-                   # minute, hour, day-in-month, month, weekday (0 = sunday)
+          # minute, hour, day-in-month, month, weekday (0 = sunday)
           hourly = " 0  *  *  *  *"; # Every full hour
-          daily  = "30  3  *  *  *"; # Every day at 3:30
+          daily = "30  3  *  *  *"; # Every day at 3:30
           weekly = " 0  5  *  *  0"; # Every sunday at 5:00 AM
         };
         description = ''
