@@ -62,15 +62,58 @@ in
       description = "Message size limit enforced by Postfix.";
     };
 
-    dovecotPipeScripts = mkOption {
-      type = types.attrsOf types.str;
-      default = { };
-      example = {
-        "hello.sh" = "echo world";
-      };
-      description = ''
-        A map of scripts available to pipe
-      '';
+    dovecot = mkOption {
+      type = types.submodule ({ ... }: {
+        options = {
+          pipeScripts = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            example = {
+              "hello.sh" = "echo world";
+            };
+            description = ''
+              A map of scripts available to pipe
+            '';
+          };
+          executeScripts = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            example = {
+              "hello.sh" = "echo world";
+            };
+            description = ''
+              A map of scripts available to execute
+            '';
+          };
+          filterScripts = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            example = {
+              "hello.sh" = "echo world";
+            };
+            description = ''
+              A map of scripts available to filter
+            '';
+          };
+          sieveGlobalExtensions = mkOption {
+            type = types.listOf types.str;
+            default = [ "vnd.dovecot.pipe" "vnd.dovecot.environment" ];
+            example = [ "vnd.dovecot.pipe" ];
+            description = ''
+              A list of global sieve extensions to enable.
+            '';
+          };
+          sieveExtensions = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = [ "vnd.dovecot.pipe" ];
+            description = ''
+              A list of sieve extensions to enable.
+            '';
+          };
+
+        };
+      });
     };
 
     loginAccounts = mkOption {
