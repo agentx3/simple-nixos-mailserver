@@ -34,30 +34,42 @@ let
   dovecotMaildir =
     "maildir:${cfg.mailDirectory}/%d/%n${maildirLayoutAppendix}"
     + (lib.optionalString (cfg.indexDir != null)
-       ":INDEX=${cfg.indexDir}/%d/%n"
-      );
+      ":INDEX=${cfg.indexDir}/%d/%n"
+    );
 
   postfixCfg = config.services.postfix;
   dovecot2Cfg = config.services.dovecot2;
 
   stateDir = "/var/lib/dovecot";
 
-  pipeBin = pkgs.stdenv.mkDerivation {
-    name = "pipe_bin";
-    src = ./dovecot/pipe_bin;
-    buildInputs = with pkgs; [ makeWrapper coreutils bash rspamd ];
-    buildCommand = ''
-      mkdir -p $out/pipe/bin
-      cp $src/* $out/pipe/bin/
-      chmod a+x $out/pipe/bin/*
-      patchShebangs $out/pipe/bin
-
-      for file in $out/pipe/bin/*; do
-        wrapProgram $file \
-          --set PATH "${pkgs.coreutils}/bin:${pkgs.rspamd}/bin"
-      done
-    '';
+  pipeScriptsDir = "${stateDir}/sieve-scripts";
+  mkPipeScript = n: v: pkgs.writeTextFile {
+    name = "sieve-${n}";
+    text = v;
+    executable = true;
+    destination = "${pipeScriptsDir}/${n}";
   };
+  genPipeScript = lib.mapAttrsToList
+    (n: v: mkPipeScript n v)
+    cfg.pipeScripts;
+
+
+  # pipeBin = pkgs.stdenv.mkDerivation {
+  #   name = "pipe_bin";
+  #   src = ./dovecot/pipe_bin;
+  #   buildInputs = with pkgs; [ makeWrapper coreutils bash rspamd ] ++ genSieveScript;
+  #   buildCommand = ''
+  #     mkdir -p $out/pipe/bin
+  #     cp $src/* $out/pipe/bin/
+  #     chmod a+x $out/pipe/bin/*
+  #     patchShebangs $out/pipe/bin
+
+  #     for file in $out/pipe/bin/*; do
+  #       wrapProgram $file \
+  #         --set PATH "${pkgs.coreutils}/bin:${pkgs.rspamd}/bin"
+  #     done
+  #   '';
+  # };
 
 
   ldapConfig = pkgs.writeTextFile {
@@ -158,6 +170,9 @@ in
       pkgs.dovecot_pigeonhole
     ];
 
+
+    system.extraDependencies = genPipeScript cfg.pipeScripts;
+
     services.dovecot2 = {
       enable = true;
       enableImap = enableImap || enableImapSsl;
@@ -170,7 +185,7 @@ in
       sslServerCert = certificatePath;
       sslServerKey = keyPath;
       enableLmtp = true;
-      modules = [ pkgs.dovecot_pigeonhole ] ++ (lib.optional cfg.fullTextSearch.enable pkgs.dovecot_fts_xapian );
+      modules = [ pkgs.dovecot_pigeonhole ] ++ (lib.optional cfg.fullTextSearch.enable pkgs.dovecot_fts_xapian);
       mailPlugins.globally.enable = lib.optionals cfg.fullTextSearch.enable [ "fts" "fts_xapian" ];
       protocols = lib.optional cfg.enableManageSieve "sieve";
 
@@ -323,7 +338,7 @@ in
           imapsieve_mailbox2_causes = COPY
           imapsieve_mailbox2_before = file:${stateDir}/imap_sieve/report-ham.sieve
 
-          sieve_pipe_bin_dir = ${pipeBin}/pipe/bin
+          sieve_pipe_bin_dir = ${pipeScriptsDir}
 
           sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
         }
@@ -366,7 +381,7 @@ in
       '' + (lib.optionalString cfg.ldap.enable setPwdInLdapConfFile);
     };
 
-    systemd.services.postfix.restartTriggers = [ genPasswdScript ] ++ (lib.optional cfg.ldap.enable [setPwdInLdapConfFile]);
+    systemd.services.postfix.restartTriggers = [ genPasswdScript ] ++ (lib.optional cfg.ldap.enable [ setPwdInLdapConfFile ]);
 
     systemd.services.dovecot-fts-xapian-optimize = lib.mkIf (cfg.fullTextSearch.enable && cfg.fullTextSearch.maintenance.enable) {
       description = "Optimize dovecot indices for fts_xapian";
