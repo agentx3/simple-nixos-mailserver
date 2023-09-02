@@ -1,3 +1,21 @@
+## Fork:
+
+### Additions:
+ * `mailserver.dovecot.pipeScripts`
+ * `mailserver.dovecot.executeScripts`
+ * `mailserver.dovecot.filterScripts`
+    * These are executable scripts placed in `sieve_<extension>_bin_dir`
+ * `mailserver.dovecot.sieveGlobalExtensions`
+ * `mailserver.dovecot.sieveExtensions`
+    * This allows adjustment of sieve_extensions and sieve_global_extensions to toggle the allowed scope of the sieve_extprograms extensions.
+
+### Why
+I wanted to run custom shellscripts within my sieve filters to do things such as `curl`. This requires the use of `vnd.dovecot.pipe` or `vnd.dovecot.execute`.
+
+The default dovecot2 settings from the upstream has `vnd.dovecot.pipe` in `sieve_global_extensions` which prevents its use inside user owned `active` sieves. Instead extensions must be placed in `sieve_extensions` to be available. Further more, the `pipe` `execute` and `filter` commands can only call executables instead their respective `sieve_<extension>_bin_dir`.
+
+
+See [dovecot docs](https://doc.dovecot.org/configuration_manual/sieve/plugins/extprograms/) for more information.
 # ![Simple Nixos MailServer][logo]
 ![license](https://img.shields.io/badge/license-GPL3-brightgreen.svg)
 [![pipeline status](https://gitlab.com/simple-nixos-mailserver/nixos-mailserver/badges/master/pipeline.svg)](https://gitlab.com/simple-nixos-mailserver/nixos-mailserver/commits/master)
